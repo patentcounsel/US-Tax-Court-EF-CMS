@@ -26,6 +26,13 @@ export const EXHIBIT_EVENT_CODES = ['EXH', 'PTE', 'HE', 'TE', 'M123', 'STIP'];
 
 export const AMENDMENT_EVENT_CODES = ['AMAT', 'ADMT'];
 
+export const LEGACY_DOCUMENT_TYPES = [
+  {
+    documentType: 'Designation of Counsel to Receive Service',
+    eventCode: 'DSC',
+  },
+];
+
 // city, state, optional unique ID (generated automatically in testing files)
 export const TRIAL_LOCATION_MATCHER = /^[a-zA-Z ]+, [a-zA-Z ]+, [0-9]+$/;
 
@@ -40,12 +47,16 @@ export const AMENDED_PETITION_FORM_NAME = 'amended-petition-form.pdf';
 export const TRIAL_SESSION_PROCEEDING_TYPES = {
   inPerson: 'In Person',
   remote: 'Remote',
-};
+} as const;
+const TRIAL_PROCEEDINGS = Object.values(TRIAL_SESSION_PROCEEDING_TYPES);
+export type TrialSessionProceedingType = (typeof TRIAL_PROCEEDINGS)[number];
 
 export const TRIAL_SESSION_SCOPE_TYPES = {
   locationBased: 'Location-based',
   standaloneRemote: 'Standalone Remote',
-};
+} as const;
+const TRIAL_SESSION_SCOPES = Object.values(TRIAL_SESSION_SCOPE_TYPES);
+export type TrialSessionScope = (typeof TRIAL_SESSION_SCOPES)[number];
 
 export const JURISDICTIONAL_OPTIONS = {
   restoredToDocket: 'The case is restored to the general docket',
@@ -77,28 +88,11 @@ export const ALLOWLIST_FEATURE_FLAGS = {
       'The ability to view a case that you are not directly associated with in a consolidated group is disabled.',
     key: 'consolidated-cases-group-access-petitioner',
   },
+  DOCUMENT_VISIBILITY_POLICY_CHANGE_DATE: {
+    key: 'document-visibility-policy-change-date',
+  },
   E_CONSENT_FIELDS_ENABLED_FEATURE_FLAG: {
     key: 'e-consent-fields-enabled-feature-flag',
-  },
-  EXTERNAL_OPINION_SEARCH: {
-    disabledMessage:
-      'Opinion search has been temporarily disabled. Please try again later.',
-    key: 'external-opinion-search-enabled',
-  },
-  EXTERNAL_ORDER_SEARCH: {
-    disabledMessage:
-      'Order search has been temporarily disabled. Please try again later.',
-    key: 'external-order-search-enabled',
-  },
-  INTERNAL_OPINION_SEARCH: {
-    disabledMessage:
-      'Opinion search has been temporarily disabled. Please try again later.',
-    key: 'internal-opinion-search-enabled',
-  },
-  INTERNAL_ORDER_SEARCH: {
-    disabledMessage:
-      'Order search has been temporarily disabled. Please try again later.',
-    key: 'internal-order-search-enabled',
   },
   MULTI_DOCKETABLE_PAPER_FILINGS: {
     disabledMessage:
@@ -436,6 +430,35 @@ export const SIMULTANEOUS_DOCUMENT_EVENT_CODES = [
   }),
 ];
 
+export const SERIATIM_DOCUMENT_EVENT_CODES = [
+  ...DOCUMENT_EXTERNAL_CATEGORIES_MAP['Seriatim Brief'].map(entry => {
+    return entry.eventCode;
+  }),
+];
+
+export const BRIEF_EVENTCODES = [
+  ...SIMULTANEOUS_DOCUMENT_EVENT_CODES,
+  ...SERIATIM_DOCUMENT_EVENT_CODES,
+];
+
+export const AMICUS_BRIEF_EVENT_CODE = 'AMBR';
+export const SIGNED_DOCUMENT_TYPES = {
+  signedStipulatedDecision: {
+    documentType: 'Stipulated Decision',
+    eventCode: 'SDEC',
+  },
+};
+
+export const POLICY_DATE_IMPACTED_EVENTCODES = [
+  ...BRIEF_EVENTCODES,
+  AMICUS_BRIEF_EVENT_CODE,
+  SIGNED_DOCUMENT_TYPES.signedStipulatedDecision.eventCode,
+  ...AMENDMENT_EVENT_CODES,
+  'REDC',
+  'SPML',
+  'SUPM',
+];
+
 export const SCENARIOS = [
   'Standard',
   'Nonstandard A',
@@ -633,12 +656,11 @@ export const SPOS_DOCUMENT = COURT_ISSUED_EVENT_CODES.find(
   doc => doc.eventCode === 'SPOS',
 );
 
-export const AMICUS_BRIEF_EVENT_CODE = 'AMBR';
-
 export const EVENT_CODES_VISIBLE_TO_PUBLIC = [
   ...COURT_ISSUED_EVENT_CODES.filter(d => d.isOrder || d.isOpinion).map(
     d => d.eventCode,
   ),
+  ...POLICY_DATE_IMPACTED_EVENTCODES,
   'DEC',
   'ODL',
   'SPTN',
@@ -777,13 +799,6 @@ export const PROPOSED_STIPULATED_DECISION_EVENT_CODE = flatten(
 export const STIPULATED_DECISION_EVENT_CODE = COURT_ISSUED_EVENT_CODES.find(
   d => d.documentType === 'Stipulated Decision',
 ).eventCode;
-
-export const SIGNED_DOCUMENT_TYPES = {
-  signedStipulatedDecision: {
-    documentType: 'Stipulated Decision',
-    eventCode: 'SDEC',
-  },
-};
 
 export const PRACTITIONER_ASSOCIATION_DOCUMENT_TYPES_MAP = [
   {
@@ -1000,7 +1015,9 @@ export const ANSWER_CUTOFF_UNIT = 'day';
 export const COUNTRY_TYPES = {
   DOMESTIC: 'domestic',
   INTERNATIONAL: 'international',
-};
+} as const;
+const CountryTypesArray = Object.values(COUNTRY_TYPES);
+export type CountryTypes = (typeof CountryTypesArray)[number];
 
 export const US_STATES = {
   AK: 'Alaska',
@@ -1096,7 +1113,9 @@ export const PARTY_TYPES = {
   survivingSpouse: 'Surviving spouse',
   transferee: 'Transferee',
   trust: 'Trust',
-};
+} as const;
+const partyTypeArray = Object.values(PARTY_TYPES);
+export type PartyType = (typeof partyTypeArray)[number];
 
 export const BUSINESS_TYPES = {
   corporation: PARTY_TYPES.corporation,
@@ -1261,7 +1280,9 @@ export const SESSION_TYPES = {
   hybridSmall: 'Hybrid-S',
   special: 'Special',
   motionHearing: 'Motion/Hearing',
-};
+} as const;
+const TRIAL_SESSION_TYPES = Object.values(SESSION_TYPES);
+export type TrialSessionTypes = (typeof TRIAL_SESSION_TYPES)[number];
 
 export const HYBRID_SESSION_TYPES = pick(SESSION_TYPES, [
   'hybrid',
@@ -1519,3 +1540,12 @@ export const PENALTY_TYPES = {
 export const MAX_ELASTICSEARCH_PAGINATION = 10000;
 export const MAX_SEARCH_CLIENT_RESULTS = 200;
 export const MAX_SEARCH_RESULTS = 100;
+
+export const isDocumentBriefType = (documentType: string) => {
+  const documents = [
+    ...DOCUMENT_EXTERNAL_CATEGORIES_MAP['Simultaneous Brief'],
+    ...DOCUMENT_EXTERNAL_CATEGORIES_MAP['Seriatim Brief'],
+  ];
+  return !!documents.find(document => document.documentType === documentType)
+    ?.eventCode;
+};

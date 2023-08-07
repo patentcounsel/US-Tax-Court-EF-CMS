@@ -1,42 +1,109 @@
 /* eslint-disable complexity */
 
+import {
+  ALLOWLIST_FEATURE_FLAGS,
+  BRIEF_EVENTCODES,
+  DOCUMENT_PROCESSING_STATUS_OPTIONS,
+  EVENT_CODES_VISIBLE_TO_PUBLIC,
+  MOTION_EVENT_CODES,
+  ORDER_EVENT_CODES,
+  POLICY_DATE_IMPACTED_EVENTCODES,
+  PUBLIC_DOCKET_RECORD_FILTER_OPTIONS,
+  isDocumentBriefType,
+} from '../../../../../shared/src/business/entities/EntityConstants';
+import { ClientApplicationContext } from '@web-client/applicationContext';
+import { Get } from 'cerebral';
 import { cloneDeep } from 'lodash';
-import { state } from 'cerebral';
+import { state } from '@web-client/presenter/app.cerebral';
+
+export const fetchRootDocument = (
+  entry: RawDocketEntry,
+  docketEntries: RawDocketEntry[],
+): RawDocketEntry => {
+  const { previousDocument } = entry;
+  if (!previousDocument) return entry;
+
+  const previousEntry = docketEntries.find(
+    e => e.docketEntryId === previousDocument.docketEntryId,
+  );
+
+  if (!previousEntry) return entry;
+
+  return fetchRootDocument(previousEntry, docketEntries);
+};
 
 export const formatDocketEntryOnDocketRecord = (
   applicationContext,
-  { entry, isTerminalUser },
+  {
+    docketEntriesEFiledByPractitioner,
+    entry,
+    isTerminalUser,
+    visibilityPolicyDateFormatted,
+  }: {
+    docketEntriesEFiledByPractitioner: string[];
+    entry: any & { rootDocument: any };
+    isTerminalUser: boolean;
+    visibilityPolicyDateFormatted: string; // ISO Date String
+  },
 ) => {
-  const { DOCUMENT_PROCESSING_STATUS_OPTIONS, EVENT_CODES_VISIBLE_TO_PUBLIC } =
-    applicationContext.getConstants();
   const record = cloneDeep(entry);
-
-  let filingsAndProceedingsWithAdditionalInfo = '';
-  if (record.documentTitle && record.additionalInfo) {
-    filingsAndProceedingsWithAdditionalInfo += ` ${record.additionalInfo}`;
-  }
-  if (record.filingsAndProceedings) {
-    filingsAndProceedingsWithAdditionalInfo += ` ${record.filingsAndProceedings}`;
-  }
-  if (record.additionalInfo2) {
-    filingsAndProceedingsWithAdditionalInfo += ` ${record.additionalInfo2}`;
-  }
 
   const isServedDocument = !record.isNotServedDocument;
 
-  const canTerminalUserSeeLink =
+  let filedByPractitioner = false;
+  let meetsPolicyChangeRequirements = false;
+  const isAmendment = ['AMAT', 'ADMT', 'REDC', 'SPML', 'SUPM'].includes(
+    entry.eventCode,
+  );
+  const filedAfterPolicyChange =
+    record.filingDate >= visibilityPolicyDateFormatted;
+
+  if (POLICY_DATE_IMPACTED_EVENTCODES.includes(entry.eventCode)) {
+    let isDocketEntryBriefEventCode;
+    const docType = entry.rootDocument.documentType;
+
+    if (isAmendment) {
+      isDocketEntryBriefEventCode = isDocumentBriefType(docType);
+
+      if (isDocketEntryBriefEventCode) {
+        filedByPractitioner = docketEntriesEFiledByPractitioner.includes(
+          entry.docketEntryId,
+        );
+        meetsPolicyChangeRequirements =
+          filedAfterPolicyChange && filedByPractitioner;
+      } else if (docType === 'Amicus Brief') {
+        meetsPolicyChangeRequirements = filedAfterPolicyChange;
+      } else {
+        meetsPolicyChangeRequirements = false;
+      }
+    } else {
+      isDocketEntryBriefEventCode = BRIEF_EVENTCODES.includes(entry.eventCode);
+
+      if (isDocketEntryBriefEventCode) {
+        filedByPractitioner = docketEntriesEFiledByPractitioner.includes(
+          entry.docketEntryId,
+        );
+        meetsPolicyChangeRequirements =
+          filedAfterPolicyChange && filedByPractitioner;
+      } else {
+        meetsPolicyChangeRequirements = filedAfterPolicyChange;
+      }
+    }
+  }
+
+  let canTerminalUserSeeLink =
     record.isFileAttached &&
     isServedDocument &&
     !record.isSealed &&
     !record.isStricken;
 
-  const canPublicUserSeeLink =
-    record.isCourtIssuedDocument &&
+  let canPublicUserSeeLink =
+    ((record.isCourtIssuedDocument && !record.isStipDecision) ||
+      meetsPolicyChangeRequirements) &&
     record.isFileAttached &&
     isServedDocument &&
     !record.isStricken &&
     !record.isTranscript &&
-    !record.isStipDecision &&
     !record.isSealed &&
     EVENT_CODES_VISIBLE_TO_PUBLIC.includes(record.eventCode);
 
@@ -72,7 +139,6 @@ export const formatDocketEntryOnDocketRecord = (
     docketEntryId: record.docketEntryId,
     eventCode: record.eventCode,
     filedBy: record.filedBy,
-    filingsAndProceedingsWithAdditionalInfo,
     hasDocument: !record.isMinuteEntry,
     index: record.index,
     isPaper: record.isPaper,
@@ -91,12 +157,10 @@ export const formatDocketEntryOnDocketRecord = (
   };
 };
 
-export const publicCaseDetailHelper = (get, applicationContext) => {
-  const {
-    MOTION_EVENT_CODES,
-    ORDER_EVENT_CODES,
-    PUBLIC_DOCKET_RECORD_FILTER_OPTIONS,
-  } = applicationContext.getConstants();
+export const publicCaseDetailHelper = (
+  get: Get,
+  applicationContext: ClientApplicationContext,
+) => {
   const publicCase = get(state.caseDetail);
   const isTerminalUser = get(state.isTerminalUser);
   const { docketRecordFilter } = get(state.sessionMetadata);
@@ -114,13 +178,30 @@ export const publicCaseDetailHelper = (get, applicationContext) => {
     .getUtilities()
     .sortDocketEntries(formattedDocketRecordsWithDocuments, 'byDate');
 
-  let formattedDocketEntriesOnDocketRecord = sortedFormattedDocketRecords.map(
-    entry =>
-      formatDocketEntryOnDocketRecord(applicationContext, {
+  const DOCUMENT_VISIBILITY_POLICY_CHANGE_DATE = get(
+    state.featureFlags[
+      ALLOWLIST_FEATURE_FLAGS.DOCUMENT_VISIBILITY_POLICY_CHANGE_DATE.key
+    ],
+  );
+
+  const visibilityPolicyDateFormatted = applicationContext
+    .getUtilities()
+    .prepareDateFromString(DOCUMENT_VISIBILITY_POLICY_CHANGE_DATE)
+    .toISO();
+
+  let formattedDocketEntriesOnDocketRecord = sortedFormattedDocketRecords
+    .map((entry: any, _, array) => {
+      return { ...entry, rootDocument: fetchRootDocument(entry, array) };
+    })
+    .map(entry => {
+      return formatDocketEntryOnDocketRecord(applicationContext, {
+        docketEntriesEFiledByPractitioner:
+          publicCase.docketEntriesEFiledByPractitioner,
         entry,
         isTerminalUser,
-      }),
-  );
+        visibilityPolicyDateFormatted,
+      });
+    });
 
   if (docketRecordFilter === PUBLIC_DOCKET_RECORD_FILTER_OPTIONS.orders) {
     formattedDocketEntriesOnDocketRecord =

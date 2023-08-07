@@ -27,7 +27,7 @@ import {
 import { ContactFactory } from '../contacts/ContactFactory';
 import { Correspondence } from '../Correspondence';
 import { DOCKET_ENTRY_VALIDATION_RULES } from '../EntityValidationConstants';
-import { DocketEntry, isServed } from '../DocketEntry';
+import { DocketEntry } from '../DocketEntry';
 import {
   FORMATS,
   PATTERNS,
@@ -43,8 +43,10 @@ import { JoiValidationConstants } from '../JoiValidationConstants';
 import { JoiValidationEntity } from '../JoiValidationEntity';
 import { Petitioner } from '../contacts/Petitioner';
 import { PrivatePractitioner } from '../PrivatePractitioner';
+import { PublicCase } from './PublicCase';
 import { Statistic } from '../Statistic';
 import { TrialSession } from '../trialSessions/TrialSession';
+import { UnprocessableEntityError } from '../../../errors/errors';
 import { User } from '../User';
 import { clone, compact, includes, isEmpty, startCase } from 'lodash';
 import { compareStrings } from '../../utilities/sortFunctions';
@@ -53,20 +55,20 @@ import { shouldGenerateDocketRecordIndex } from '../../utilities/shouldGenerateD
 import joi from 'joi';
 
 export class Case extends JoiValidationEntity {
-  public associatedJudge: string;
-  public automaticBlocked: boolean;
+  public associatedJudge?: string;
+  public automaticBlocked?: boolean;
   public automaticBlockedDate?: string;
   public automaticBlockedReason?: string;
-  public blocked: boolean;
+  public blocked?: boolean;
   public blockedDate?: string;
   public blockedReason?: string;
   public caseStatusHistory: any[];
-  public caseNote: string;
-  public damages: string;
-  public highPriority: boolean;
+  public caseNote?: string;
+  public damages?: number;
+  public highPriority?: boolean;
   public highPriorityReason?: string;
-  public judgeUserId: string;
-  public litigationCosts: string;
+  public judgeUserId?: string;
+  public litigationCosts?: number;
   public qcCompleteForTrial: boolean;
   public noticeOfAttachments: boolean;
   public orderDesignatingPlaceOfTrial: boolean;
@@ -121,6 +123,7 @@ export class Case extends JoiValidationEntity {
   public correspondence: any[];
   public archivedCorrespondences: any[];
   public hasPendingItems: boolean;
+  public docketEntriesEFiledByPractitioner: string[];
 
   constructor(
     rawCase: any,
@@ -158,6 +161,8 @@ export class Case extends JoiValidationEntity {
     this.assignDocketEntries(params);
     this.assignHearings(params);
     this.assignPractitioners(params);
+    this.docketEntriesEFiledByPractitioner =
+      PublicCase.getDocketEntriesEFiledByPractitioner(rawCase);
     this.assignFieldsForAllUsers(params);
     if (isNewCase) {
       const changedBy = rawCase.isPaper
@@ -341,7 +346,7 @@ export class Case extends JoiValidationEntity {
       },
       'Your STIN file size is empty',
     ],
-  };
+  } as const;
 
   getErrorToMessageMap() {
     return Case.VALIDATION_ERROR_MESSAGES;
@@ -633,7 +638,6 @@ export class Case extends JoiValidationEntity {
         then: JoiValidationConstants.ISO_DATE.max('now').required(),
       },
     ).description('When the case fee was waived.'),
-    // Individual items are validated by the ContactFactory.
     petitioners: joi
       .array()
       .unique(
@@ -870,7 +874,7 @@ export class Case extends JoiValidationEntity {
 
   assignContacts({ applicationContext, rawCase }) {
     if (!rawCase.status || rawCase.status === CASE_STATUS_TYPES.new) {
-      const contacts = ContactFactory.createContacts({
+      const contacts = ContactFactory({
         applicationContext,
         contactInfo: {
           primary: getContactPrimary(rawCase) || rawCase.contactPrimary,
@@ -1002,19 +1006,16 @@ export class Case extends JoiValidationEntity {
     this.irsPractitioners.push(practitioner);
   }
 
-  /**
-   * archives a docket entry and adds it to the archivedDocketEntries array on the case
-   * @param {string} docketEntry the docketEntry to archive
-   */
-  archiveDocketEntry(docketEntry, { applicationContext }) {
-    const docketEntryToArchive = new DocketEntry(docketEntry, {
-      applicationContext,
-      petitioners: this.petitioners,
-    });
-    docketEntryToArchive.archive();
-    this.archivedDocketEntries.push(docketEntryToArchive);
+  archiveDocketEntry(docketEntry: DocketEntry) {
+    if (DocketEntry.isServed(docketEntry) || docketEntry.isOnDocketRecord) {
+      throw new UnprocessableEntityError(
+        'Cannot archive docket entry that has already been served.',
+      );
+    }
+    docketEntry.archive();
+    this.archivedDocketEntries.push(docketEntry);
     this.deleteDocketEntryById({
-      docketEntryId: docketEntryToArchive.docketEntryId,
+      docketEntryId: docketEntry.docketEntryId,
     });
   }
 
@@ -1306,7 +1307,7 @@ export class Case extends JoiValidationEntity {
    * @params {string} petitionerContactId the id of the petitioner
    * @returns {Object} the practitioner
    */
-  getPractitionersRepresenting(petitionerContactId) {
+  getPractitionersRepresenting(petitionerContactId: string) {
     return getPractitionersRepresenting(this, petitionerContactId);
   }
 
@@ -1891,13 +1892,10 @@ export class Case extends JoiValidationEntity {
     return this;
   }
 
-  /**
-   * checks all the practitioners on the case to see if there is a privatePractitioner associated with the userId
-   * @param {String} userId the id of the user
-   * @returns {boolean} if the userId has a privatePractitioner associated with them
-   */
-  isUserIdRepresentedByPrivatePractitioner(userId) {
-    return isUserIdRepresentedByPrivatePractitioner(this, userId);
+  static isPetitionerRepresented(rawCase, userId: string): boolean {
+    return !!rawCase.privatePractitioners?.find(practitioner =>
+      practitioner.representing.find(id => id === userId),
+    );
   }
 
   /**
@@ -2074,7 +2072,9 @@ export const isLeadCase = rawCase =>
   rawCase.docketNumber === rawCase.leadDocketNumber;
 
 export const caseHasServedDocketEntries = rawCase => {
-  return !!rawCase.docketEntries.some(docketEntry => isServed(docketEntry));
+  return rawCase.docketEntries.some(docketEntry =>
+    DocketEntry.isServed(docketEntry),
+  );
 };
 
 /**
@@ -2170,8 +2170,8 @@ export const getPetitionerByEmail = function (rawCase, userEmail) {
  * @returns {Object} the practitioner
  */
 export const getPractitionersRepresenting = function (
-  rawCase,
-  petitionerContactId,
+  rawCase: RawCase,
+  petitionerContactId: string,
 ) {
   return rawCase.privatePractitioners.filter(practitioner =>
     practitioner.representing.includes(petitionerContactId),
@@ -2187,7 +2187,7 @@ export const getPetitionDocketEntry = function (rawCase) {
 
 export const caseHasServedPetition = rawCase => {
   const petitionDocketEntry = getPetitionDocketEntry(rawCase);
-  return petitionDocketEntry && isServed(petitionDocketEntry);
+  return petitionDocketEntry && DocketEntry.isServed(petitionDocketEntry);
 };
 
 /**
@@ -2214,7 +2214,8 @@ export const isAssociatedUser = function ({ caseRaw, user }) {
     doc => doc.documentType === 'Petition',
   );
 
-  const isPetitionServed = petitionDocketEntry && isServed(petitionDocketEntry);
+  const isPetitionServed =
+    petitionDocketEntry && DocketEntry.isServed(petitionDocketEntry);
 
   return (
     isIrsPractitioner ||
@@ -2446,18 +2447,4 @@ const generateCaptionFromContacts = ({
       break;
   }
   return caseCaption;
-};
-
-/**
- * checks all the practitioners on the case to see if there is a privatePractitioner associated with the userId
- * @param {String} userId the id of the user
- * @returns {boolean} if the userId has a privatePractitioner associated with them
- */
-export const isUserIdRepresentedByPrivatePractitioner = function (
-  rawCase,
-  userId,
-) {
-  return !!rawCase.privatePractitioners?.find(practitioner =>
-    practitioner.representing.find(id => id === userId),
-  );
 };

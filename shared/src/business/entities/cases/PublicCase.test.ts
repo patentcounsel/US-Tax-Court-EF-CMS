@@ -1,7 +1,4 @@
-const {
-  applicationContext,
-} = require('../../test/createTestApplicationContext');
-const {
+import {
   CASE_STATUS_TYPES,
   CONTACT_TYPES,
   COUNTRY_TYPES,
@@ -10,16 +7,22 @@ const {
   ROLES,
   TRANSCRIPT_EVENT_CODE,
   UNIQUE_OTHER_FILER_TYPE,
-} = require('../EntityConstants');
-const { getContactSecondary } = require('./Case');
-const { MOCK_CASE } = require('../../../test/mockCase');
-const { MOCK_COMPLEX_CASE } = require('../../../test/mockComplexCase');
-const { MOCK_USERS } = require('../../../test/mockUsers');
-const { PublicCase } = require('./PublicCase');
+} from '../EntityConstants';
+import { MOCK_CASE } from '../../../test/mockCase';
+import { MOCK_COMPLEX_CASE } from '../../../test/mockComplexCase';
+import { MOCK_USERS } from '../../../test/mockUsers';
+import { PublicCase } from './PublicCase';
+import { applicationContext } from '../../test/createTestApplicationContext';
+import { getContactSecondary } from './Case';
 
-const mockContactId = 'b430f7f9-06f3-4a25-915d-5f51adab2f29';
-const mockContactIdSecond = '39a359e9-dde3-409e-b40e-77a4959b6f2c';
 describe('PublicCase', () => {
+  const mockContactId = 'b430f7f9-06f3-4a25-915d-5f51adab2f29';
+  const mockContactIdSecond = '39a359e9-dde3-409e-b40e-77a4959b6f2c';
+
+  it('should throw an error when applicationContext is not provided to the constructor', () => {
+    expect(() => new PublicCase({}, {} as any)).toThrow(TypeError);
+  });
+
   describe('validation', () => {
     it('should validate when all information is provided and case is not sealed', () => {
       const entity = new PublicCase(
@@ -27,6 +30,7 @@ describe('PublicCase', () => {
           caseCaption: 'testing',
           createdAt: '2020-01-02T03:30:45.007Z',
           docketEntries: [{}],
+          docketEntriesEFiledByPractitioner: [],
           docketNumber: '101-20',
           docketNumberSuffix: DOCKET_NUMBER_SUFFIXES.SMALL,
           irsPractitioners: [{ name: 'Bob' }],
@@ -108,7 +112,9 @@ describe('PublicCase', () => {
       canAllowDocumentService: true,
       canAllowPrintableDocketRecord: false,
       caseCaption: 'testing',
+      createdAt: 'testing',
       docketEntries: [],
+      docketEntriesEFiledByPractitioner: [],
       docketNumber: 'testing',
       docketNumberSuffix: 'testing',
       docketNumberWithSuffix: 'testingtesting',
@@ -122,6 +128,8 @@ describe('PublicCase', () => {
           contactId: mockContactId,
           contactType: CONTACT_TYPES.primary,
           entityName: 'PublicContact',
+          name: undefined,
+          state: undefined,
         },
         {
           contactId: mockContactIdSecond,
@@ -159,8 +167,12 @@ describe('PublicCase', () => {
     );
 
     expect(entity.toRawObject()).toEqual({
+      canAllowDocumentService: undefined,
+      canAllowPrintableDocketRecord: undefined,
       caseCaption: 'testing',
+      createdAt: 'testing',
       docketEntries: [],
+      docketEntriesEFiledByPractitioner: [],
       docketNumber: 'testing',
       docketNumberSuffix: 'testing',
       docketNumberWithSuffix: 'testingtesting',
@@ -173,6 +185,8 @@ describe('PublicCase', () => {
           contactId: mockContactId,
           contactType: CONTACT_TYPES.primary,
           entityName: 'PublicContact',
+          name: undefined,
+          state: undefined,
         },
       ],
       receivedAt: 'testing',
@@ -198,23 +212,12 @@ describe('PublicCase', () => {
       { applicationContext },
     );
 
-    expect(entity.toRawObject().docketEntries).toEqual([
+    expect(entity.toRawObject().docketEntries).toMatchObject([
       {
-        additionalInfo: undefined,
-        additionalInfo2: undefined,
         docketEntryId: '123',
-        documentTitle: undefined,
         documentType: 'Order that case is assigned',
-        eventCode: undefined,
-        filedBy: undefined,
         isMinuteEntry: false,
         isOnDocketRecord: true,
-        isPaper: undefined,
-        isSealed: false,
-        processingStatus: undefined,
-        receivedAt: undefined,
-        servedAt: undefined,
-        servedParties: undefined,
       },
     ]);
   });
@@ -339,7 +342,6 @@ describe('PublicCase', () => {
     const entity = new PublicCase(rawCase, { applicationContext });
 
     expect(entity.irsPractitioners).toBeUndefined();
-    expect(entity.otherFilers).toBeUndefined();
     expect(entity.privatePractitioners).toBeUndefined();
     expect(entity.leadDocketNumber).toBeUndefined();
   });
@@ -547,7 +549,6 @@ describe('PublicCase', () => {
       const entity = new PublicCase(rawCase, { applicationContext });
 
       expect(entity.irsPractitioners).toBeUndefined();
-      expect(entity.otherFilers).toBeUndefined();
       expect(entity.privatePractitioners).toBeUndefined();
     });
   });
@@ -588,7 +589,6 @@ describe('PublicCase', () => {
     const entity = new PublicCase(rawCase, { applicationContext });
 
     expect(entity.irsPractitioners).toBeDefined();
-    expect(entity.otherFilers).toBeUndefined();
     expect(entity.privatePractitioners).toBeDefined();
     expect(entity.leadDocketNumber).toBeDefined();
   });

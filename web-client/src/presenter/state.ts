@@ -1,3 +1,4 @@
+import { RawTrialSession } from 'shared/src/business/entities/trialSessions/TrialSession';
 import { addCourtIssuedDocketEntryHelper } from './computeds/addCourtIssuedDocketEntryHelper';
 import { addCourtIssuedDocketEntryNonstandardHelper } from './computeds/addCourtIssuedDocketEntryNonstandardHelper';
 import { addDocketEntryHelper } from './computeds/addDocketEntryHelper';
@@ -20,6 +21,7 @@ import { caseDetailSubnavHelper } from './computeds/caseDetailSubnavHelper';
 import { caseInformationHelper } from './computeds/caseInformationHelper';
 import { caseInventoryReportHelper } from './computeds/caseInventoryReportHelper';
 import { caseSearchBoxHelper } from './computeds/caseSearchBoxHelper';
+import { caseSearchByNameHelper } from './computeds/AdvancedSearch/CaseSearchByNameHelper';
 import { caseSearchNoMatchesHelper } from './computeds/caseSearchNoMatchesHelper';
 import { caseStatusHistoryHelper } from './computeds/caseStatusHistoryHelper';
 import { caseTypeDescriptionHelper } from './computeds/caseTypeDescriptionHelper';
@@ -79,8 +81,10 @@ import { messageDocumentHelper } from './computeds/messageDocumentHelper';
 import { messageModalHelper } from './computeds/messageModalHelper';
 import { messagesHelper } from './computeds/messagesHelper';
 import { myAccountHelper } from './computeds/myAccountHelper';
+import { noticeStatusHelper } from './computeds/noticeStatusHelper';
 import { orderTypesHelper } from './computeds/orderTypesHelper';
 import { paperDocketEntryHelper } from './computeds/paperDocketEntryHelper';
+import { paperServiceStatusHelper } from './computeds/paperServiceStatusHelper';
 import { partiesInformationHelper } from './computeds/partiesInformationHelper';
 import { pdfPreviewModalHelper } from './computeds/PDFPreviewModal/pdfPreviewModalHelper';
 import { pdfSignerHelper } from './computeds/pdfSignerHelper';
@@ -100,6 +104,7 @@ import { reviewSavedPetitionHelper } from './computeds/reviewSavedPetitionHelper
 import { scanBatchPreviewerHelper } from './computeds/scanBatchPreviewerHelper';
 import { scanHelper } from './computeds/scanHelper';
 import { sealedCaseDetailHelper } from './computeds/sealedCaseDetailHelper';
+import { serveThirtyDayNoticeModalHelper } from './computeds/serveThirtyDayNoticeModalHelper';
 import { sessionAssignmentHelper } from './computeds/sessionAssignmentHelper';
 import { setForHearingModalHelper } from './computeds/setForHearingModalHelper';
 import { showAppTimeoutModalHelper } from './computeds/showAppTimeoutModalHelper';
@@ -125,7 +130,7 @@ import { workQueueHelper } from './computeds/workQueueHelper';
 
 const { ASCENDING, DOCKET_RECORD_FILTER_OPTIONS, IDLE_STATUS } = getConstants();
 
-const helpers = {
+export const computeds = {
   addCourtIssuedDocketEntryHelper,
   addCourtIssuedDocketEntryNonstandardHelper,
   addDocketEntryHelper,
@@ -148,6 +153,7 @@ const helpers = {
   caseInformationHelper,
   caseInventoryReportHelper,
   caseSearchBoxHelper,
+  caseSearchByNameHelper,
   caseSearchNoMatchesHelper,
   caseStatusHistoryHelper,
   caseTypeDescriptionHelper,
@@ -202,8 +208,10 @@ const helpers = {
   messageModalHelper,
   messagesHelper,
   myAccountHelper,
+  noticeStatusHelper,
   orderTypesHelper,
   paperDocketEntryHelper,
+  paperServiceStatusHelper,
   partiesInformationHelper,
   pdfPreviewModalHelper,
   pdfSignerHelper,
@@ -223,6 +231,7 @@ const helpers = {
   scanBatchPreviewerHelper,
   scanHelper,
   sealedCaseDetailHelper,
+  serveThirtyDayNoticeModalHelper,
   sessionAssignmentHelper,
   setForHearingModalHelper,
   showAppTimeoutModalHelper,
@@ -248,7 +257,7 @@ const helpers = {
 };
 
 export const baseState = {
-  advancedSearchForm: {}, // form for advanced search screen, TODO: replace with state.form
+  advancedSearchForm: {} as any, // form for advanced search screen, TODO: replace with state.form
   advancedSearchTab: 'case',
   allJudges: [],
   archiveDraftDocument: {
@@ -257,14 +266,18 @@ export const baseState = {
     docketNumber: null,
     documentTitle: null,
   },
-  assigneeId: null, // used for assigning workItems in assignSelectedWorkItemsAction
-  batchDownloads: {}, // batch download of PDFs
-  caseDeadlineReport: {},
-  caseDetail: {} as TCase,
+  assigneeId: null,
+  batchDownloads: {},
+  caseDeadlineReport: {} as {
+    caseDeadlines: RawCaseDeadline[];
+    judgeFilter: string;
+    totalCount: number;
+    page: number;
+  },
+  caseDetail: {} as RawCase,
   closedCases: [],
   cognitoLoginUrl: null,
   completeForm: {},
-  // TODO: replace with state.form
   currentJudges: [],
   currentPage: 'Interstitial',
   currentViewMetadata: {
@@ -304,7 +317,7 @@ export const baseState = {
     percentComplete: 0,
     timeRemaining: Number.POSITIVE_INFINITY,
   },
-  form: {},
+  form: {} as any,
   // shared object for creating new entities, clear before using
   header: {
     searchTerm: '',
@@ -316,8 +329,10 @@ export const baseState = {
   idleTimerRef: null,
   individualInProgressCount: 0,
   individualInboxCount: 0,
+  isTerminalUser: false,
   judgeActivityReportData: {},
-  judges: [],
+  judgeUser: {} as any,
+  judges: [] as RawUser[],
   legacyAndCurrentJudges: [],
   messagesInboxCount: 0,
   messagesSectionCount: 0,
@@ -326,8 +341,16 @@ export const baseState = {
     showModal: undefined, // the name of the modal to display
   },
   navigation: {},
+  noticeStatusState: {
+    casesProcessed: 0,
+    totalCases: 0,
+  },
   notifications: {},
   openCases: [],
+  paperServiceStatusState: {
+    pdfsAppended: 0,
+    totalPdfs: 0,
+  },
   pdfForSigning: {
     docketEntryId: null,
     nameForSigning: '',
@@ -348,6 +371,7 @@ export const baseState = {
     waitingForResponse: false,
     waitingForResponseRequests: 0,
   },
+  saveAlertsForNavigation: false,
   scanner: {
     batchIndexToDelete: null,
     batchIndexToRescan: null, // batch index for re-scanning
@@ -372,10 +396,10 @@ export const baseState = {
     sortField: 'createdAt',
     sortOrder: ASCENDING,
   },
+  trialSession: {} as RawTrialSession,
   trialSessionJudge: {
     name: '',
   },
-
   user: null,
   // used for progress indicator when updating contact information for all of a user's cases
   userContactEditProgress: {},
@@ -388,16 +412,9 @@ export const baseState = {
   workQueueToDisplay: { box: 'inbox', queue: 'my' },
 };
 
-export const state = {
-  ...helpers,
+export const initialState = {
   ...baseState,
+  ...computeds,
 };
 
-declare global {
-  type State = typeof state & {
-    constants: ReturnType<typeof getConstants>;
-    modal: any;
-    screenMetadata: any;
-    featureFlags: any;
-  };
-}
+export type ClientState = typeof initialState;
