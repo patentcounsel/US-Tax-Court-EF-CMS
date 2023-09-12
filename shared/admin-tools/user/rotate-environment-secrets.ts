@@ -1,4 +1,9 @@
-import { CognitoIdentityProvider } from '@aws-sdk/client-cognito-identity-provider';
+import {
+  AdminSetUserPasswordCommand,
+  AdminSetUserPasswordCommandOutput,
+  CognitoIdentityProvider,
+  ListUsersCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 import {
   GetSecretValueCommand,
   PutSecretValueCommand,
@@ -6,8 +11,8 @@ import {
 } from '@aws-sdk/client-secrets-manager';
 import { checkEnvVar } from '../util';
 import { shuffle } from 'lodash';
-const { COGNITO_USER_POOL, ENV } = process.env;
 
+const { COGNITO_USER_POOL, ENV } = process.env;
 const secretsClient = new SecretsManagerClient({ region: 'us-east-1' });
 const cognitoClient = new CognitoIdentityProvider({
   region: 'us-east-1',
@@ -97,13 +102,53 @@ const rotateSecrets = async (environmentName: string): Promise<void> => {
   });
   await secretsClient.send(putSecretValueCommand);
 
-  // TODO: update all Cognito accounts that are @example.com or @$EFCMS_DOMAIN with DEFAULT_ACCOUNT_PASS
-  // TODO: Cognito ListUsersCommand
+  if (process.env.ENV !== 'prod') {
+    await updateEnvironmentUsers(DEFAULT_ACCOUNT_PASS);
+  }
 
   console.log('✅ Secrets updated');
 };
 
-rotateSecrets(ENV).then(() => {
+const updateEnvironmentUsers = async (DEFAULT_ACCOUNT_PASS: string) => {
+  let PaginationToken: string | undefined;
+
+  do {
+    const listUsersCommand = new ListUsersCommand({
+      Limit: 60,
+      PaginationToken,
+      UserPoolId: COGNITO_USER_POOL,
+    });
+    const result = await cognitoClient.send(listUsersCommand);
+
+    if (!result.Users) {
+      break;
+    }
+
+    const promises: Promise<AdminSetUserPasswordCommandOutput | void>[] =
+      result.Users?.map(user => {
+        const email = user.Attributes?.find(attr => attr.Name === 'email')
+          ?.Value;
+
+        if (!email?.match(/@(example.com|ef-cms\.ustaxcourt\.gov)$/)) {
+          return Promise.resolve();
+        }
+
+        const updatePasswordCommand = new AdminSetUserPasswordCommand({
+          Password: DEFAULT_ACCOUNT_PASS,
+          Permanent: true,
+          UserPoolId: COGNITO_USER_POOL,
+          Username: user.Username,
+        });
+        return cognitoClient.send(updatePasswordCommand);
+      });
+
+    await Promise.all(promises);
+
+    ({ PaginationToken } = result);
+  } while (PaginationToken);
+};
+
+rotateSecrets(ENV!).then(() => {
   console.log(
     '🏁 All done. Be sure to run setup-test-users.sh or wait for the next deploy',
   );
