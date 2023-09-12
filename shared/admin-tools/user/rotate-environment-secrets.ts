@@ -96,6 +96,10 @@ const rotateSecrets = async (environmentName: string): Promise<void> => {
     }),
   });
   await secretsClient.send(putSecretValueCommand);
+
+  // TODO: update all Cognito accounts that are @example.com or @$EFCMS_DOMAIN with DEFAULT_ACCOUNT_PASS
+  // TODO: Cognito ListUsersCommand
+
   console.log('✅ Secrets updated');
 };
 
