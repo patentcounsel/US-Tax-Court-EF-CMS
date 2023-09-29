@@ -2,8 +2,8 @@ import { applicationContext } from '../../../../shared/src/business/test/createT
 import { sendSlackNotification } from './sendSlackNotification';
 
 describe('sendSlackNotification', () => {
-  beforeEach(() => {
-    applicationContext.getSlackWebhookUrl.mockReturnValueOnce(
+  beforeAll(() => {
+    applicationContext.getSlackWebhookUrl.mockReturnValue(
       'https://slack.example.com',
     );
 
@@ -80,5 +80,19 @@ describe('sendSlackNotification', () => {
     });
 
     expect(applicationContext.getHttpClient().post).not.toHaveBeenCalled();
+  });
+
+  it('logs a warning if there is no slackWebookUrl configured', async () => {
+    applicationContext.getSlackWebhookUrl.mockReturnValue(undefined);
+
+    await sendSlackNotification({
+      applicationContext,
+      text: 'How about now?',
+      topic: 'test-topic',
+    });
+
+    expect(applicationContext.logger.warn).toHaveBeenCalledWith(
+      'No environment variable specified for Slack Webhook URL',
+    );
   });
 });
