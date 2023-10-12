@@ -382,6 +382,7 @@ export const createTestApplicationContext = ({ user } = {}) => {
     generateChangeOfAddressHelper: jest
       .fn()
       .mockImplementation(generateChangeOfAddressHelper),
+    getJudgeForUserHelper: jest.fn(),
     getJudgeInSectionHelper: jest.fn(),
     getUserIdForNote: jest.fn().mockImplementation(getUserIdForNote),
     removeCounselFromRemovedPetitioner: jest
@@ -404,6 +405,7 @@ export const createTestApplicationContext = ({ user } = {}) => {
     changeOfAddress: jest.fn().mockImplementation(getFakeFile),
     coverSheet: jest.fn().mockImplementation(getFakeFile),
     docketRecord: jest.fn().mockImplementation(getFakeFile),
+    entryOfAppearance: jest.fn().mockImplementation(getFakeFile),
     noticeOfChangeOfTrialJudge: jest.fn().mockImplementation(getFakeFile),
     noticeOfChangeToInPersonProceeding: jest
       .fn()
