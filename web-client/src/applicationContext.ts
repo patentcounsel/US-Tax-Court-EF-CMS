@@ -33,7 +33,7 @@ import {
 } from '../../shared/src/sharedAppContext';
 import { ErrorFactory } from './presenter/errors/ErrorFactory';
 import { RawIrsPractitioner } from '@shared/business/entities/IrsPractitioner';
-import { User } from '../../shared/src/business/entities/User';
+import { RawUser, User } from '../../shared/src/business/entities/User';
 import { abbreviateState } from '../../shared/src/business/utilities/abbreviateState';
 import { addCaseToTrialSessionInteractor } from '../../shared/src/proxies/trialSessions/addCaseToTrialSessionProxy';
 import { addConsolidatedCaseInteractor } from '../../shared/src/proxies/addConsolidatedCaseProxy';
@@ -56,10 +56,8 @@ import {
   calculateDifferenceInDays,
   calculateISODate,
   checkDate,
-  computeDate,
   createEndOfDayISO,
   createISODateString,
-  createISODateStringFromObject,
   createStartOfDayISO,
   dateStringsCompared,
   deconstructDate,
@@ -76,6 +74,7 @@ import {
 import { canConsolidateInteractor } from '../../shared/src/business/useCases/caseConsolidation/canConsolidateInteractor';
 import { canSetTrialSessionAsCalendaredInteractor } from '../../shared/src/business/useCases/trialSessions/canSetTrialSessionAsCalendaredInteractor';
 import { caseAdvancedSearchInteractor } from '../../shared/src/proxies/caseAdvancedSearchProxy';
+import { caseStatusWithTrialInformation } from '@shared/business/utilities/caseStatusWithTrialInformation';
 import { changePasswordLocalInteractor } from '../../shared/src/proxies/auth/changePasswordLocalProxy';
 import { checkEmailAvailabilityInteractor } from '../../shared/src/proxies/users/checkEmailAvailabilityProxy';
 import { closeTrialSessionInteractor } from '../../shared/src/proxies/trialSessions/closeTrialSessionProxy';
@@ -101,7 +100,6 @@ import { createMessageInteractor } from '../../shared/src/proxies/messages/creat
 import { createPractitionerDocumentInteractor } from '../../shared/src/proxies/practitioners/createPractitionerDocumentProxy';
 import { createPractitionerUserInteractor } from '../../shared/src/proxies/practitioners/createPractitionerUserProxy';
 import { createTrialSessionInteractor } from '../../shared/src/proxies/trialSessions/createTrialSessionProxy';
-import { createUserInteractorLocal } from '../../shared/src/proxies/createUserInteractorLocalProxy';
 import { deleteAuthCookieInteractor } from '../../shared/src/proxies/auth/deleteAuthCookieProxy';
 import { deleteCaseDeadlineInteractor } from '../../shared/src/proxies/caseDeadline/deleteCaseDeadlineProxy';
 import { deleteCaseNoteInteractor } from '../../shared/src/proxies/caseNote/deleteCaseNoteProxy';
@@ -135,6 +133,7 @@ import {
   formatJudgeName,
   getJudgeLastName,
 } from '../../shared/src/business/utilities/getFormattedJudgeName';
+import { formatPendingItem } from '@shared/business/utilities/formatPendingItem';
 import { formatPhoneNumber } from '../../shared/src/business/utilities/formatPhoneNumber';
 import { forwardMessageInteractor } from '../../shared/src/proxies/messages/forwardMessageProxy';
 import { generateCaseAssociationDocumentTitleInteractor } from '../../shared/src/business/useCases/caseAssociationRequest/generateCaseAssociationDocumentTitleInteractor';
@@ -151,7 +150,6 @@ import { generatePrintablePendingReportInteractor } from '../../shared/src/proxi
 import { generatePrintableTrialSessionCopyReportInteractor } from '../../shared/src/proxies/trialSessions/generatePrintableTrialSessionCopyReportProxy';
 import { generateSignedDocumentInteractor } from '../../shared/src/business/useCases/generateSignedDocumentInteractor';
 import { generateTrialCalendarPdfInteractor } from '../../shared/src/proxies/trialSessions/generateTrialCalendarPdfProxy';
-import { generateTrialSessionPaperServicePdfInteractor } from '../../shared/src/proxies/trialSessions/generateTrialSessionPaperServicePdfProxy';
 import { getAllFeatureFlagsInteractor } from '../../shared/src/proxies/featureFlag/getAllFeatureFlagsProxy';
 import { getBlockedCasesInteractor } from '../../shared/src/proxies/reports/getBlockedCasesProxy';
 import { getCalendaredCasesForTrialSessionInteractor } from '../../shared/src/proxies/trialSessions/getCalendaredCasesForTrialSessionProxy';
@@ -174,7 +172,7 @@ import { getCompletedMessagesForUserInteractor } from '../../shared/src/proxies/
 import { getConstants } from './getConstants';
 import { getCountOfCaseDocumentsFiledByJudgesInteractor } from '@shared/proxies/reports/getCountOfCaseDocumentsFiledByJudgesProxy';
 import { getCropBox } from '../../shared/src/business/utilities/getCropBox';
-import { getCustomCaseInventoryReportInteractor } from '../../shared/src/proxies/reports/getCustomCaseInventoryReportProxy';
+import { getCustomCaseReportInteractor } from '../../shared/src/proxies/reports/getCustomCaseReportProxy';
 import { getDescriptionDisplay } from '../../shared/src/business/utilities/getDescriptionDisplay';
 import {
   getDocQcSectionForUser,
@@ -206,6 +204,7 @@ import { getMessagesForCaseInteractor } from '../../shared/src/proxies/messages/
 import { getNotificationsInteractor } from '../../shared/src/proxies/users/getNotificationsProxy';
 import { getOutboxMessagesForSectionInteractor } from '../../shared/src/proxies/messages/getOutboxMessagesForSectionProxy';
 import { getOutboxMessagesForUserInteractor } from '../../shared/src/proxies/messages/getOutboxMessagesForUserProxy';
+import { getPaperServicePdfUrlInteractor } from '@shared/proxies/trialSessions/getPaperServicePdfUrlProxy';
 import { getPdfFromUrl } from '@web-client/persistence/s3/getPdfFromUrl';
 import { getPdfFromUrlInteractor } from '../../shared/src/business/useCases/document/getPdfFromUrlInteractor';
 import { getPractitionerByBarNumberInteractor } from '../../shared/src/proxies/users/getPractitionerByBarNumberProxy';
@@ -275,6 +274,8 @@ import { setServiceIndicatorsForCase } from '../../shared/src/business/utilities
 import { setTrialSessionCalendarInteractor } from '../../shared/src/proxies/trialSessions/setTrialSessionCalendarProxy';
 import { setWorkItemAsReadInteractor } from '../../shared/src/proxies/workitems/setWorkItemAsReadProxy';
 import { setupPdfDocument } from '../../shared/src/business/utilities/setupPdfDocument';
+import { signUpUserInteractor } from '../../shared/src/proxies/signUpUserProxy';
+import { sleep } from '../../shared/src/business/utilities/sleep';
 import { strikeDocketEntryInteractor } from '../../shared/src/proxies/editDocketEntry/strikeDocketEntryProxy';
 import { submitCaseAssociationRequestInteractor } from '../../shared/src/proxies/documents/submitCaseAssociationRequestProxy';
 import { submitPendingCaseAssociationRequestInteractor } from '../../shared/src/proxies/documents/submitPendingCaseAssociationRequestProxy';
@@ -413,7 +414,6 @@ const allUseCases = {
   createPractitionerDocumentInteractor,
   createPractitionerUserInteractor,
   createTrialSessionInteractor,
-  createUserInteractorLocal,
   deleteAuthCookieInteractor,
   deleteCaseDeadlineInteractor,
   deleteCaseNoteInteractor,
@@ -446,7 +446,6 @@ const allUseCases = {
   generatePrintableTrialSessionCopyReportInteractor,
   generateSignedDocumentInteractor,
   generateTrialCalendarPdfInteractor,
-  generateTrialSessionPaperServicePdfInteractor,
   getAllFeatureFlagsInteractor,
   getBlockedCasesInteractor,
   getCalendaredCasesForTrialSessionInteractor,
@@ -461,7 +460,7 @@ const allUseCases = {
   getCompletedMessagesForSectionInteractor,
   getCompletedMessagesForUserInteractor,
   getCountOfCaseDocumentsFiledByJudgesInteractor,
-  getCustomCaseInventoryReportInteractor,
+  getCustomCaseReportInteractor,
   getDocumentContentsForDocketEntryInteractor,
   getDocumentDownloadUrlInteractor,
   getDocumentQCInboxForSectionInteractor,
@@ -482,6 +481,7 @@ const allUseCases = {
   getNotificationsInteractor,
   getOutboxMessagesForSectionInteractor,
   getOutboxMessagesForUserInteractor,
+  getPaperServicePdfUrlInteractor,
   getPdfFromUrlInteractor,
   getPractitionerByBarNumberInteractor,
   getPractitionerDocumentDownloadUrlInteractor,
@@ -540,6 +540,7 @@ const allUseCases = {
   setNoticesForCalendaredTrialSessionInteractor,
   setTrialSessionCalendarInteractor,
   setWorkItemAsReadInteractor,
+  signUpUserInteractor,
   strikeDocketEntryInteractor,
   submitCaseAssociationRequestInteractor,
   submitPendingCaseAssociationRequestInteractor,
@@ -732,14 +733,13 @@ const applicationContext = {
       canAllowDocumentServiceForCase,
       caseHasServedDocketEntries,
       caseHasServedPetition,
+      caseStatusWithTrialInformation,
       checkDate,
       compareCasesByDocketNumber,
       compareISODateStrings,
       compareStrings,
-      computeDate,
       createEndOfDayISO,
       createISODateString,
-      createISODateStringFromObject,
       createStartOfDayISO,
       dateStringsCompared,
       deconstructDate,
@@ -752,6 +752,7 @@ const applicationContext = {
       formatDollars,
       formatJudgeName,
       formatNow,
+      formatPendingItem,
       formatPhoneNumber,
       generateCourtIssuedDocumentTitle,
       generateExternalDocumentTitle,
@@ -801,6 +802,7 @@ const applicationContext = {
       setConsolidationFlagsForDisplay,
       setServiceIndicatorsForCase,
       setupPdfDocument,
+      sleep,
       sortDocketEntries,
       transformFormValueToTitleCaseOrdinal,
       userIsDirectlyAssociated,
